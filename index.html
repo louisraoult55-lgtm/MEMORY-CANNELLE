@@ -176,6 +176,71 @@
       box-shadow:0 0 0 2px #2ee59d22, 0 0 25px #2ee59d22;
     }
 
+    /* ✅ MINI HUD (infos au-dessus des cartes en "Grand écran") */
+    .miniHud{
+      display:none;
+      width:100%;
+      border-radius:14px;
+      padding:10px 12px;
+      margin-bottom:10px;
+      background: linear-gradient(180deg, #0b1020, #0f1630);
+      border:1px solid #ffffff14;
+      box-shadow:0 10px 25px #00000055;
+      gap:10px;
+      flex-direction:column;
+    }
+    .miniHud .row{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+    .miniHud .title{
+      font-weight:900;
+      font-size:14px;
+      color:var(--text);
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+    .miniHud .status{
+      font-size:13px;
+      color:var(--muted);
+      font-weight:800;
+      padding:6px 10px;
+      border-radius:999px;
+      border:1px solid #ffffff14;
+      background:#111b3a;
+    }
+    .miniHud .scoreLine{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      font-size:13px;
+      color:var(--muted);
+      flex-wrap:wrap;
+    }
+    .miniHud .chip{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:6px 10px;
+      border-radius:999px;
+      border:1px solid #ffffff14;
+      background:#0b1020;
+      color:var(--text);
+      font-weight:900;
+    }
+    .miniHud .chip.me{
+      border-color:#7c5cff55;
+      box-shadow:0 0 0 2px #7c5cff20 inset;
+    }
+    .miniHud .chip.turn{
+      border-color:#2ee59d55;
+      box-shadow:0 0 0 2px #2ee59d18 inset;
+    }
+
     /* ✅ MODE "GRAND ÉCRAN" (mobile) */
     body.fullscreen{
       padding:0;
@@ -202,6 +267,12 @@
       display:flex;
       flex-direction:column;
     }
+
+    /* ✅ Le mini HUD devient visible uniquement en fullscreen */
+    body.fullscreen #miniHud{
+      display:flex;
+    }
+
     body.fullscreen .board{
       flex:1;
       align-content:start;
@@ -286,6 +357,10 @@
 
       <!-- ✅ BOX JEU -->
       <div class="box" id="boardBox">
+
+        <!-- ✅ MINI HUD (visible seulement en mode Grand écran) -->
+        <div id="miniHud" class="miniHud"></div>
+
         <div class="board" id="board"></div>
       </div>
     </div>
@@ -321,6 +396,9 @@
     const copyLinkBtn = document.getElementById("copyLinkBtn");
     const restartBtn = document.getElementById("restartBtn");
     const fullscreenBtn = document.getElementById("fullscreenBtn");
+
+    // ✅ Mini HUD
+    const miniHud = document.getElementById("miniHud");
 
     // ✅ Bouton Grand écran
     fullscreenBtn.addEventListener("click", ()=>{
@@ -392,6 +470,7 @@
     function render(){
       renderBoard();
       renderPlayers();
+      renderMiniHud(); // ✅ NEW
     }
 
     function renderBoard(){
@@ -449,6 +528,50 @@
 
       const turnName = players?.[cache.turnUid]?.name || "-";
       turnPill.innerHTML = `🎯 Tour : <strong>${turnName}</strong>`;
+    }
+
+    // ✅ MINI HUD affiché uniquement en Grand écran
+    function renderMiniHud(){
+      if(!miniHud) return;
+
+      const players = cache.players || {};
+      const entries = Object.entries(players).map(([id,p])=>({id, ...p}));
+      entries.sort((a,b)=>(a.joinedAt||0)-(b.joinedAt||0));
+
+      const me = entries.find(p=>p.id === uid);
+      const other = entries.find(p=>p.id !== uid);
+
+      const enough = entries.length >= 2;
+      const turnUid = cache.turnUid;
+      const turnName = players?.[turnUid]?.name || "-";
+
+      // Statut "à toi / pas ton tour"
+      let statusText = "En attente…";
+      if(!currentRoomId) statusText = "Crée / rejoins une salle";
+      else if(!enough) statusText = "En attente du 2e joueur…";
+      else if(turnUid === uid) statusText = "✅ À toi de jouer";
+      else statusText = "⏳ Pas ton tour";
+
+      // Chips joueurs
+      const meName = me?.name || "Toi";
+      const meScore = me?.score ?? 0;
+      const otherName = other?.name || "Adversaire";
+      const otherScore = other?.score ?? 0;
+
+      const meIsTurn = (turnUid === uid);
+      const otherIsTurn = (turnUid && other?.id === turnUid);
+
+      miniHud.innerHTML = `
+        <div class="row">
+          <div class="title">🎯 Tour : <span style="color:var(--accent);font-weight:900;">${turnName}</span></div>
+          <div class="status">${statusText}</div>
+        </div>
+
+        <div class="row scoreLine">
+          <span class="chip ${meIsTurn ? 'turn' : ''} me">🧍 ${meName} : ${meScore}</span>
+          <span class="chip ${otherIsTurn ? 'turn' : ''}">👤 ${otherName} : ${otherScore}</span>
+        </div>
+      `;
     }
 
     function enoughPlayers(){
