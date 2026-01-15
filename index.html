@@ -13,9 +13,12 @@
     *{box-sizing:border-box;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;}
     body{
       margin:0; min-height:100vh;
-      background: radial-gradient(900px 600px at 20% 10%, #7c5cff20, transparent),
-                  radial-gradient(900px 600px at 90% 40%, #2ee59d14, transparent),
-                  var(--bg);
+
+      /* ✅ Nouveau fond (image + voile sombre) */
+      background:
+        linear-gradient(#0b1020cc, #0b1020cc),
+        url("fond.jpg") center / cover no-repeat fixed;
+
       color:var(--text);
       display:flex; align-items:center; justify-content:center;
       padding:16px;
