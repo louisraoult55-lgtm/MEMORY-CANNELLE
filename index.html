@@ -16,7 +16,6 @@
 
     body{
       margin:0; min-height:100vh;
-      /* ✅ FOND AVEC IMAGE + LÉGER VOILE POUR GARDER LA LISIBILITÉ */
       background:
         radial-gradient(900px 600px at 20% 10%, #7c5cff30, transparent),
         radial-gradient(900px 600px at 90% 40%, #2ee59d25, transparent),
@@ -176,7 +175,7 @@
       box-shadow:0 0 0 2px #2ee59d22, 0 0 25px #2ee59d22;
     }
 
-    /* ✅ MINI HUD (infos au-dessus des cartes en "Grand écran") */
+    /* ✅ MINI HUD (infos visibles au-dessus du board) */
     .miniHud{
       display:none;
       width:100%;
@@ -241,7 +240,7 @@
       box-shadow:0 0 0 2px #2ee59d18 inset;
     }
 
-    /* ✅ MODE "GRAND ÉCRAN" (mobile) */
+    /* ✅ MODE PLEIN ÉCRAN MOBILE (vraiment jouable sans scroll + infos visibles) */
     body.fullscreen{
       padding:0;
     }
@@ -252,12 +251,19 @@
       padding:10px;
       display:flex;
       flex-direction:column;
-      justify-content:flex-start;
     }
+
+    /* ✅ IMPORTANT : on enlève toute la barre du haut en fullscreen */
+    body.fullscreen .top{
+      display:none;
+    }
+
     body.fullscreen .grid{
       grid-template-columns: 1fr;
       gap:10px;
       height:100%;
+      flex:1;
+      min-height:0;
     }
     body.fullscreen #infoBox{
       display:none;
@@ -266,19 +272,24 @@
       flex:1;
       display:flex;
       flex-direction:column;
+      min-height:0;
     }
 
-    /* ✅ Le mini HUD devient visible uniquement en fullscreen */
+    /* ✅ HUD visible + collé en haut du jeu */
     body.fullscreen #miniHud{
       display:flex;
+      position:sticky;
+      top:0;
+      z-index:999;
     }
 
     body.fullscreen .board{
       flex:1;
+      min-height:0;
       align-content:start;
     }
 
-    /* ✅ OPTI MOBILE: 16 cartes sans scroll */
+    /* ✅ OPTI MOBILE */
     @media (max-width:600px){
       body{
         padding:8px;
@@ -306,10 +317,61 @@
         font-size:28px;
       }
     }
+
+    /* ✅ MODAL MESSAGE D'ARRIVÉE */
+    .modalOverlay{
+      position:fixed;
+      inset:0;
+      background:#000000aa;
+      display:none;
+      align-items:center;
+      justify-content:center;
+      z-index:9999;
+      padding:18px;
+    }
+    .modal{
+      width:min(520px, 100%);
+      background:#0f1630f2;
+      border:1px solid #ffffff22;
+      border-radius:18px;
+      padding:16px;
+      box-shadow:0 25px 60px #00000088;
+      backdrop-filter: blur(10px);
+    }
+    .modal h2{
+      margin:0 0 10px;
+      font-size:16px;
+      font-weight:900;
+    }
+    .modal p{
+      margin:0;
+      font-size:14px;
+      color:#ffffffd9;
+      line-height:1.35;
+    }
+    .modalActions{
+      display:flex;
+      justify-content:flex-end;
+      margin-top:14px;
+    }
   </style>
 </head>
 
 <body>
+
+  <!-- ✅ Message au démarrage -->
+  <div class="modalOverlay" id="introOverlay">
+    <div class="modal">
+      <h2>💜 Petit message</h2>
+      <p>
+        Ce jeu a été fait par amour pour que même éloigné, nous puissions jouer à notre jeu tant aimé
+      </p>
+      <div class="modalActions">
+        <button id="introCloseBtn">Continuer</button>
+      </div>
+    </div>
+  </div>
+
   <div class="app">
     <div class="top">
       <div>
@@ -357,8 +419,7 @@
 
       <!-- ✅ BOX JEU -->
       <div class="box" id="boardBox">
-
-        <!-- ✅ MINI HUD (visible seulement en mode Grand écran) -->
+        <!-- ✅ INFOS TOUJOURS VISIBLES EN MODE PLEIN ÉCRAN -->
         <div id="miniHud" class="miniHud"></div>
 
         <div class="board" id="board"></div>
@@ -371,7 +432,6 @@
     import { getDatabase, ref, set, update, onValue, runTransaction, onDisconnect } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-database.js";
     import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js";
 
-    // ✅ TA CONFIG FIREBASE
     const firebaseConfig = {
       apiKey: "AIzaSyDOIQseB8gGXP1BJ3IVp6NbE9QhkDqVBrM",
       authDomain: "memory-online-44103.firebaseapp.com",
@@ -397,15 +457,54 @@
     const restartBtn = document.getElementById("restartBtn");
     const fullscreenBtn = document.getElementById("fullscreenBtn");
 
-    // ✅ Mini HUD
     const miniHud = document.getElementById("miniHud");
 
-    // ✅ Bouton Grand écran
-    fullscreenBtn.addEventListener("click", ()=>{
+    // ✅ MODAL d'arrivée
+    const introOverlay = document.getElementById("introOverlay");
+    const introCloseBtn = document.getElementById("introCloseBtn");
+
+    function showIntroOnce(){
+      const seen = localStorage.getItem("memory_intro_seen");
+      if(seen) return;
+      introOverlay.style.display = "flex";
+    }
+    introCloseBtn.addEventListener("click", ()=>{
+      introOverlay.style.display = "none";
+      localStorage.setItem("memory_intro_seen", "1");
+    });
+
+    // ✅ Bouton plein écran : tente vrai fullscreen + fallback class
+    async function toggleFullscreen(){
+      const root = document.documentElement;
+
+      const isRealFullscreen = !!document.fullscreenElement;
+      const isClassFullscreen = document.body.classList.contains("fullscreen");
+
+      // Si vrai fullscreen dispo et pas actif → on le demande
+      if(!isRealFullscreen && root.requestFullscreen){
+        try{
+          await root.requestFullscreen();
+        }catch(e){
+          // si bloqué (iPhone etc), on bascule quand même en mode "fullscreen visuel"
+        }
+      }
+
+      // Toggle classe quoi qu'il arrive (ça garantit le layout mobile jeu)
       document.body.classList.toggle("fullscreen");
+
       fullscreenBtn.textContent = document.body.classList.contains("fullscreen")
         ? "⬅️ Quitter"
         : "📱 Grand écran";
+    }
+
+    fullscreenBtn.addEventListener("click", toggleFullscreen);
+
+    // ✅ Si l'utilisateur sort du vrai fullscreen, on remet le layout normal
+    document.addEventListener("fullscreenchange", ()=>{
+      if(!document.fullscreenElement){
+        document.body.classList.remove("fullscreen");
+        fullscreenBtn.textContent = "📱 Grand écran";
+      }
     });
 
     const sleep = (ms)=>new Promise(r=>setTimeout(r,ms));
@@ -456,6 +555,7 @@
       uid = user.uid;
       connPill.innerHTML = "🔌 Connexion : <strong>OK</strong>";
       autoJoinFromURL();
+      renderMiniHud(); // ✅ direct
     });
 
     function autoJoinFromURL(){
@@ -470,7 +570,7 @@
     function render(){
       renderBoard();
       renderPlayers();
-      renderMiniHud(); // ✅ NEW
+      renderMiniHud();
     }
 
     function renderBoard(){
@@ -530,7 +630,7 @@
       turnPill.innerHTML = `🎯 Tour : <strong>${turnName}</strong>`;
     }
 
-    // ✅ MINI HUD affiché uniquement en Grand écran
+    // ✅ LES INFOS QUI DOIVENT TOUJOURS ÊTRE VISIBLES EN PLEIN ÉCRAN
     function renderMiniHud(){
       if(!miniHud) return;
 
@@ -545,14 +645,12 @@
       const turnUid = cache.turnUid;
       const turnName = players?.[turnUid]?.name || "-";
 
-      // Statut "à toi / pas ton tour"
       let statusText = "En attente…";
       if(!currentRoomId) statusText = "Crée / rejoins une salle";
       else if(!enough) statusText = "En attente du 2e joueur…";
       else if(turnUid === uid) statusText = "✅ À toi de jouer";
       else statusText = "⏳ Pas ton tour";
 
-      // Chips joueurs
       const meName = me?.name || "Toi";
       const meScore = me?.score ?? 0;
       const otherName = other?.name || "Adversaire";
@@ -568,7 +666,7 @@
         </div>
 
         <div class="row scoreLine">
-          <span class="chip ${meIsTurn ? 'turn' : ''} me">🧍 ${meName} : ${meScore}</span>
+          <span class="chip me ${meIsTurn ? 'turn' : ''}">🧍 ${meName} : ${meScore}</span>
           <span class="chip ${otherIsTurn ? 'turn' : ''}">👤 ${otherName} : ${otherScore}</span>
         </div>
       `;
@@ -645,7 +743,7 @@
           matched[a] = true;
           matched[b] = true;
           if(players[by]) players[by].score = (players[by].score || 0) + 1;
-          state.turnUid = by; // rejoue
+          state.turnUid = by;
         }else{
           const ids = Object.keys(players);
           const other = ids.find(x=>x !== by);
@@ -787,6 +885,9 @@
       if(!roomId) return toast("Mets le Room ID 🙂");
       await joinRoom(roomId, name, false);
     });
+
+    // ✅ message au démarrage
+    showIntroOnce();
   </script>
 </body>
 </html>
