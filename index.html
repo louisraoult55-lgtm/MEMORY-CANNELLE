@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Memory Duo Online</title>
+  <style>
+    :root{
+      --bg:#0b1020; --card:#121a33; --card2:#1b2550;
+      --text:#e9ecff; --muted:#aab0d6; --accent:#7c5cff;
+      --good:#2ee59d; --bad:#ff4d4d;
+    }
+    *{box-sizing:border-box;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;}
+    body{
+      margin:0; min-height:100vh;
+      background: radial-gradient(900px 600px at 20% 10%, #7c5cff20, transparent),
+                  radial-gradient(900px 600px at 90% 40%, #2ee59d14, transparent),
+                  var(--bg);
+      color:var(--text);
+      display:flex; align-items:center; justify-content:center;
+      padding:16px;
+    }
+    .app{
+      width:min(980px, 100%);
+      background:#0f1630cc;
+      border:1px solid #ffffff14;
+      border-radius:18px;
+      padding:16px;
+      box-shadow:0 20px 50px #00000066;
+      backdrop-filter: blur(8px);
+    }
+    .top{
+      display:flex; gap:12px; flex-wrap:wrap;
+      align-items:center; justify-content:space-between;
+      margin-bottom:12px;
+    }
+    h1{margin:0;font-size:18px;}
+    .sub{margin:4px 0 0;color:var(--muted);font-size:13px;}
+    .panel{
+      display:flex; gap:8px; flex-wrap:wrap; align-items:center;
+      justify-content:flex-end;
+    }
+    input, button{
+      border-radius:12px;
+      border:1px solid #ffffff18;
+      background:#0f1630;
+      color:var(--text);
+      padding:10px 12px;
+      outline:none;
+      font-size:14px;
+    }
+    input::placeholder{color:#ffffff55;}
+    button{
+      cursor:pointer;
+      background: linear-gradient(180deg, #7c5cff, #5b39ff);
+      border:none;
+      font-weight:800;
+    }
+    button.secondary{
+      background:#0f1630;
+      border:1px solid #ffffff18;
+      font-weight:700;
+    }
+    button:disabled{opacity:.5; cursor:not-allowed;}
+
+    .grid{
+      display:grid;
+      grid-template-columns: 1.15fr 2fr;
+      gap:12px;
+    }
+    @media (max-width:860px){ .grid{grid-template-columns:1fr;} }
+
+    .box{
+      background:#0f1630;
+      border:1px solid #ffffff14;
+      border-radius:16px;
+      padding:14px;
+    }
+
+    .pill{
+      display:inline-flex; gap:8px; align-items:center;
+      padding:10px 12px;
+      border-radius:14px;
+      border:1px solid #ffffff14;
+      background:#0b1020;
+      color:var(--muted);
+      font-size:13px;
+      margin-bottom:10px;
+      width:100%;
+      justify-content:space-between;
+    }
+    .pill strong{color:var(--text);}
+    .roomId{
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing:1px;
+      padding:6px 10px;
+      border-radius:12px;
+      background:#111b3a;
+      border:1px solid #ffffff14;
+      color:#cfc6ff;
+    }
+
+    .players{display:flex; flex-direction:column; gap:10px; margin-top:10px;}
+    .player{
+      padding:10px 12px;
+      border-radius:16px;
+      border:1px solid #ffffff14;
+      background:#0b1020;
+      display:flex; justify-content:space-between; align-items:center;
+      gap:10px;
+    }
+    .player .name{font-weight:900;}
+    .player .me{font-size:12px;color:var(--accent);font-weight:800;margin-left:6px;}
+    .player .score{font-weight:900;font-size:18px;}
+    .badge{
+      display:inline-flex;
+      padding:4px 8px;
+      border-radius:999px;
+      background:#7c5cff1c;
+      border:1px solid #7c5cff40;
+      color:#cfc6ff;
+      font-size:12px;
+      width:max-content;
+      margin-top:4px;
+    }
+
+    .hint{color:var(--muted);font-size:13px;line-height:1.35;margin-top:8px;}
+    .toast{min-height:18px;margin-top:8px;color:#ffffffcc;font-size:13px;}
+
+    .board{
+      display:grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap:10px;
+    }
+    .tile{
+      width:100%;
+      aspect-ratio:1/1;
+      perspective:1000px;
+    }
+    .flip{
+      width:100%; height:100%;
+      border-radius:18px;
+      position:relative;
+      transform-style:preserve-3d;
+      transition: transform .35s ease;
+    }
+    .tile.revealed .flip{ transform: rotateY(180deg); }
+    .face{
+      position:absolute; inset:0;
+      border-radius:18px;
+      backface-visibility:hidden;
+      display:flex; align-items:center; justify-content:center;
+      font-size:34px;
+      user-select:none;
+      border:1px solid #ffffff14;
+    }
+    .front{ background: linear-gradient(180deg, #1b2550, #121a33); }
+    .back{
+      transform: rotateY(180deg);
+      background:#0b1020;
+      font-weight:900;
+    }
+    .tile.matched .back{
+      outline:2px solid #2ee59d55;
+      box-shadow:0 0 0 2px #2ee59d22, 0 0 25px #2ee59d22;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="top">
+      <div>
+        <h1>🧠 Memory Duo Online</h1>
+        <div class="sub">Crée une salle, partage le lien, et jouez tour par tour en direct.</div>
+      </div>
+      <div class="panel">
+        <input id="nameInput" placeholder="Ton prénom" maxlength="20"/>
+        <input id="roomInput" placeholder="Room ID" maxlength="10"/>
+        <button id="createBtn">Créer salle</button>
+        <button id="joinBtn" class="secondary">Rejoindre</button>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="box">
+        <div class="pill" id="connPill">🔌 Connexion : <strong>…</strong></div>
+
+        <div class="pill">
+          🏠 Salle :
+          <span class="roomId" id="roomIdSpan">-</span>
+        </div>
+
+        <div class="pill" id="turnPill">🎯 Tour : <strong>-</strong></div>
+
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button id="copyLinkBtn" class="secondary" disabled>Copier lien</button>
+          <button id="restartBtn" class="secondary" disabled>🔁 Recommencer</button>
+        </div>
+
+        <div class="players" id="playersBox"></div>
+
+        <div class="hint">
+          Règles : si tu trouves une paire ✅ tu rejoues.  
+          Si tu rates ❌ le tour passe à l'autre.
+        </div>
+
+        <div class="toast" id="toast"></div>
+      </div>
+
+      <div class="box">
+        <div class="board" id="board"></div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-app.js";
+    import { getDatabase, ref, set, update, onValue, runTransaction, onDisconnect } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-database.js";
+    import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js";
+
+    // ✅ TA CONFIG FIREBASE (déjà mise)
+    const firebaseConfig = {
+      apiKey: "AIzaSyDOIQseB8gGXP1BJ3IVp6NbE9QhkDqVBrM",
+      authDomain: "memory-online-44103.firebaseapp.com",
+      databaseURL: "https://memory-online-44103-default-rtdb.firebaseio.com",
+      projectId: "memory-online-44103",
+      storageBucket: "memory-online-44103.firebasestorage.app",
+      messagingSenderId: "503133138747",
+      appId: "1:503133138747:web:f0d3336dcf3305d858911e",
+      measurementId: "G-YQ8GL3DSW9"
+    };
+
+    const nameInput = document.getElementById("nameInput");
+    const roomInput = document.getElementById("roomInput");
+    const createBtn = document.getElementById("createBtn");
+    const joinBtn = document.getElementById("joinBtn");
+    const boardEl = document.getElementById("board");
+    const connPill = document.getElementById("connPill");
+    const roomIdSpan = document.getElementById("roomIdSpan");
+    const turnPill = document.getElementById("turnPill");
+    const playersBox = document.getElementById("playersBox");
+    const toastEl = document.getElementById("toast");
+    const copyLinkBtn = document.getElementById("copyLinkBtn");
+    const restartBtn = document.getElementById("restartBtn");
+
+    const sleep = (ms)=>new Promise(r=>setTimeout(r,ms));
+    const EMOJIS = ["🐶","🐱","🐰","🦊","🐻","🐼","🐯","🐵"]; // 8 paires
+
+    function shuffle(arr){
+      const a=[...arr];
+      for(let i=a.length-1;i>0;i--){
+        const j=Math.floor(Math.random()*(i+1));
+        [a[i],a[j]]=[a[j],a[i]];
+      }
+      return a;
+    }
+    function randId(len=6){
+      const chars="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+      let s="";
+      for(let i=0;i<len;i++) s+=chars[Math.floor(Math.random()*chars.length)];
+      return s;
+    }
+    function toast(msg, color=""){
+      toastEl.style.color = color || "#ffffffcc";
+      toastEl.textContent = msg;
+      setTimeout(()=>{ if(toastEl.textContent===msg) toastEl.textContent=""; }, 2500);
+    }
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    const auth = getAuth(app);
+
+    let uid = null;
+    let currentRoomId = null;
+    let roomRef = null;
+
+    let cache = {
+      deck: [],
+      flipped: [],
+      matched: {},
+      lock: false,
+      turnUid: null,
+      pendingEval: null,
+      players: {}
+    };
+
+    signInAnonymously(auth).catch(console.error);
+
+    onAuthStateChanged(auth, (user)=>{
+      if(!user) return;
+      uid = user.uid;
+      connPill.innerHTML = "🔌 Connexion : <strong>OK</strong>";
+      autoJoinFromURL();
+    });
+
+    function autoJoinFromURL(){
+      const params = new URLSearchParams(location.search);
+      const room = params.get("room");
+      if(room){
+        roomInput.value = room;
+        toast("Room trouvée dans le lien ✅");
+      }
+    }
+
+    function render(){
+      renderBoard();
+      renderPlayers();
+    }
+
+    function renderBoard(){
+      boardEl.innerHTML = "";
+      const deck = cache.deck || [];
+      const flipped = cache.flipped || [];
+      const matched = cache.matched || {};
+
+      deck.forEach((val, idx)=>{
+        const tile = document.createElement("div");
+        tile.className="tile";
+        const revealed = flipped.includes(idx) || matched[idx];
+        if(revealed) tile.classList.add("revealed");
+        if(matched[idx]) tile.classList.add("matched");
+
+        tile.innerHTML = `
+          <div class="flip">
+            <div class="face front">🎴</div>
+            <div class="face back">${val}</div>
+          </div>
+        `;
+        tile.addEventListener("click", ()=> onTileClick(idx));
+        boardEl.appendChild(tile);
+      });
+    }
+
+    function renderPlayers(){
+      playersBox.innerHTML = "";
+      const players = cache.players || {};
+      const entries = Object.entries(players).map(([id,p])=>({id, ...p}));
+
+      entries.sort((a,b)=>(a.joinedAt||0)-(b.joinedAt||0));
+
+      if(entries.length === 0){
+        playersBox.innerHTML = `<div class="pill">👥 Joueurs : <strong>0</strong></div>`;
+        turnPill.innerHTML = `🎯 Tour : <strong>-</strong>`;
+        return;
+      }
+
+      entries.forEach(p=>{
+        const isMe = (p.id === uid);
+        const isTurn = (cache.turnUid === p.id);
+
+        const el = document.createElement("div");
+        el.className = "player";
+        el.innerHTML = `
+          <div>
+            <div class="name">${p.name || "Joueur"} ${isMe ? '<span class="me">(toi)</span>' : ""}</div>
+            ${isTurn ? `<div class="badge">C’est son tour</div>` : ``}
+          </div>
+          <div class="score">${p.score ?? 0}</div>
+        `;
+        playersBox.appendChild(el);
+      });
+
+      const turnName = players?.[cache.turnUid]?.name || "-";
+      turnPill.innerHTML = `🎯 Tour : <strong>${turnName}</strong>`;
+    }
+
+    function enoughPlayers(){
+      return Object.keys(cache.players || {}).length >= 2;
+    }
+
+    function canPlay(){
+      if(!currentRoomId) return false;
+      if(!enoughPlayers()) return false;
+      if(cache.lock) return false;
+      if(cache.turnUid !== uid) return false;
+      return true;
+    }
+
+    async function onTileClick(idx){
+      if(!currentRoomId) return toast("Crée ou rejoins une salle d’abord 🙂");
+      if(!enoughPlayers()) return toast("En attente du 2e joueur…", "#aab0d6");
+      if(!canPlay()) return toast("Pas ton tour 👀", "#aab0d6");
+
+      const stateRef = ref(db, `rooms/${currentRoomId}/state`);
+
+      await runTransaction(stateRef, (state)=>{
+        if(!state) return state;
+        if(state.lock) return state;
+
+        const flipped = state.flipped || [];
+        const matched = state.matched || {};
+        if(matched[idx]) return state;
+        if(flipped.includes(idx)) return state;
+        if(state.turnUid !== uid) return state;
+
+        flipped.push(idx);
+
+        if(flipped.length === 2){
+          state.lock = true;
+          state.pendingEval = {
+            a: flipped[0],
+            b: flipped[1],
+            by: uid,
+            at: Date.now()
+          };
+        }
+
+        state.flipped = flipped;
+        return state;
+      });
+    }
+
+    async function evaluateIfNeeded(){
+      const pe = cache.pendingEval;
+      if(!pe) return;
+      if(pe.by !== uid) return;
+
+      await sleep(700);
+
+      await runTransaction(ref(db, `rooms/${currentRoomId}`), (room)=>{
+        if(!room) return room;
+
+        const state = room.state;
+        const players = room.players || {};
+
+        if(!state || !state.pendingEval) return room;
+
+        const { a, b, by } = state.pendingEval;
+        const deck = state.deck || [];
+        const matched = state.matched || {};
+
+        const same = deck[a] === deck[b];
+
+        if(same){
+          matched[a] = true;
+          matched[b] = true;
+          if(players[by]) players[by].score = (players[by].score || 0) + 1;
+          state.turnUid = by; // rejoue
+        }else{
+          const ids = Object.keys(players);
+          const other = ids.find(x=>x !== by);
+          state.turnUid = other || by;
+        }
+
+        state.matched = matched;
+        state.flipped = [];
+        state.lock = false;
+        state.pendingEval = null;
+
+        return room;
+      });
+    }
+
+    async function createRoom(){
+      const name = (nameInput.value || "Joueur").trim().slice(0,20);
+      const roomId = randId(6);
+
+      const deck = shuffle([...EMOJIS, ...EMOJIS]);
+      const roomPath = `rooms/${roomId}`;
+
+      const initial = {
+        state: {
+          deck,
+          flipped: [],
+          matched: {},
+          lock: false,
+          pendingEval: null,
+          turnUid: uid
+        },
+        players: {
+          [uid]: { name, score: 0, joinedAt: Date.now() }
+        },
+        createdAt: Date.now()
+      };
+
+      await set(ref(db, roomPath), initial);
+      await joinRoom(roomId, name, true);
+    }
+
+    async function joinRoom(roomId, name, isCreator=false){
+      currentRoomId = roomId;
+      roomIdSpan.textContent = roomId;
+      roomRef = ref(db, `rooms/${roomId}`);
+
+      await update(ref(db, `rooms/${roomId}/players/${uid}`), {
+        name: name || "Joueur",
+        score: 0,
+        joinedAt: Date.now()
+      });
+
+      onDisconnect(ref(db, `rooms/${roomId}/players/${uid}`)).remove().catch(()=>{});
+
+      onValue(roomRef, async (snap)=>{
+        const room = snap.val();
+
+        if(!room){
+          toast("Salle introuvable ❌", "#ff9b9b");
+          return;
+        }
+
+        cache = {
+          ...cache,
+          ...(room.state || {}),
+          players: room.players || {}
+        };
+
+        copyLinkBtn.disabled = false;
+        restartBtn.disabled = Object.keys(cache.players || {}).length < 1;
+
+        if(!cache.turnUid && Object.keys(cache.players || {}).length){
+          const first = Object.keys(cache.players)[0];
+          await update(ref(db, `rooms/${roomId}/state`), { turnUid: first });
+        }
+
+        render();
+
+        if(cache.pendingEval) evaluateIfNeeded();
+      });
+
+      toast(isCreator ? "Salle créée ✅ partage le lien !" : "Salle rejointe ✅");
+      updateURL(roomId);
+    }
+
+    function updateURL(roomId){
+      const url = new URL(location.href);
+      url.searchParams.set("room", roomId);
+      history.replaceState({}, "", url.toString());
+    }
+
+    copyLinkBtn.addEventListener("click", async ()=>{
+      if(!currentRoomId) return;
+      const url = new URL(location.href);
+      url.searchParams.set("room", currentRoomId);
+      try{
+        await navigator.clipboard.writeText(url.toString());
+        toast("Lien copié ✅ envoie-le à ta femme");
+      }catch{
+        toast("Copie manuelle : " + url.toString());
+      }
+    });
+
+    restartBtn.addEventListener("click", async ()=>{
+      if(!currentRoomId) return;
+      if(cache.turnUid !== uid) return toast("Seul le joueur qui a le tour peut restart 👀", "#aab0d6");
+
+      const deck = shuffle([...EMOJIS, ...EMOJIS]);
+
+      const players = cache.players || {};
+      const updates = {};
+      Object.keys(players).forEach(id=>{
+        updates[`rooms/${currentRoomId}/players/${id}/score`] = 0;
+      });
+
+      updates[`rooms/${currentRoomId}/state`] = {
+        deck,
+        flipped: [],
+        matched: {},
+        lock: false,
+        pendingEval: null,
+        turnUid: uid
+      };
+
+      await update(ref(db), updates);
+      toast("Nouvelle partie ✅");
+    });
+
+    createBtn.addEventListener("click", async ()=>{
+      const name = (nameInput.value || "Joueur").trim();
+      if(!name) return toast("Mets ton prénom 🙂");
+      await createRoom();
+    });
+
+    joinBtn.addEventListener("click", async ()=>{
+      const name = (nameInput.value || "Joueur").trim();
+      const roomId = (roomInput.value || "").trim().toUpperCase();
+      if(!name) return toast("Mets ton prénom 🙂");
+      if(!roomId) return toast("Mets le Room ID 🙂");
+      await joinRoom(roomId, name, false);
+    });
+  </script>
+</body>
+</html>
