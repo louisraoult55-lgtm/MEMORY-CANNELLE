@@ -11,6 +11,7 @@
       --text:#e9ecff; --muted:#aab0d6; --accent:#7c5cff;
       --good:#2ee59d; --bad:#ff4d4d;
       --gap:10px;
+      --cols:4; /* ✅ nombre de colonnes dynamique */
     }
     *{box-sizing:border-box;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;}
 
@@ -48,7 +49,7 @@
       display:flex; gap:8px; flex-wrap:wrap; align-items:center;
       justify-content:flex-end;
     }
-    input, button{
+    input, button, select{
       border-radius:12px;
       border:1px solid #ffffff18;
       background:#0f1630;
@@ -138,7 +139,7 @@
     /* ✅ BOARD */
     .board{
       display:grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(var(--cols, 4), 1fr);
       gap: var(--gap);
     }
 
@@ -240,7 +241,7 @@
       box-shadow:0 0 0 2px #2ee59d18 inset;
     }
 
-    /* ✅ MODE PLEIN ÉCRAN MOBILE (vraiment jouable sans scroll + infos visibles) */
+    /* ✅ MODE PLEIN ÉCRAN MOBILE */
     body.fullscreen{
       padding:0;
     }
@@ -253,7 +254,7 @@
       flex-direction:column;
     }
 
-    /* ✅ IMPORTANT : on enlève toute la barre du haut en fullscreen */
+    /* ✅ on enlève toute la barre du haut en fullscreen */
     body.fullscreen .top{
       display:none;
     }
@@ -275,7 +276,7 @@
       min-height:0;
     }
 
-    /* ✅ HUD visible + collé en haut du jeu */
+    /* ✅ HUD visible + collé */
     body.fullscreen #miniHud{
       display:flex;
       position:sticky;
@@ -303,7 +304,7 @@
       }
       h1{font-size:16px;}
       .sub{font-size:12px;}
-      input, button{
+      input, button, select{
         padding:9px 10px;
         font-size:13px;
       }
@@ -382,6 +383,14 @@
       <div class="panel">
         <input id="nameInput" placeholder="Ton prénom" maxlength="20"/>
         <input id="roomInput" placeholder="Room ID" maxlength="10"/>
+
+        <!-- ✅ Choix du nombre de cartes -->
+        <select id="cardsSelect" title="Nombre de cartes">
+          <option value="12">12 cartes</option>
+          <option value="16" selected>16 cartes</option>
+          <option value="20">20 cartes</option>
+        </select>
+
         <button id="createBtn">Créer salle</button>
         <button id="joinBtn" class="secondary">Rejoindre</button>
 
@@ -419,9 +428,7 @@
 
       <!-- ✅ BOX JEU -->
       <div class="box" id="boardBox">
-        <!-- ✅ INFOS TOUJOURS VISIBLES EN MODE PLEIN ÉCRAN -->
         <div id="miniHud" class="miniHud"></div>
-
         <div class="board" id="board"></div>
       </div>
     </div>
@@ -459,6 +466,9 @@
 
     const miniHud = document.getElementById("miniHud");
 
+    // ✅ Choix nombre de cartes
+    const cardsSelect = document.getElementById("cardsSelect");
+
     // ✅ MODAL d'arrivée
     const introOverlay = document.getElementById("introOverlay");
     const introCloseBtn = document.getElementById("introCloseBtn");
@@ -473,33 +483,36 @@
       localStorage.setItem("memory_intro_seen", "1");
     });
 
-    // ✅ Bouton plein écran : tente vrai fullscreen + fallback class
-    async function toggleFullscreen(){
+    // ✅ Bouton plein écran
+    async function toggleFullscreen(forceExit = false){
       const root = document.documentElement;
-
       const isRealFullscreen = !!document.fullscreenElement;
-      const isClassFullscreen = document.body.classList.contains("fullscreen");
 
-      // Si vrai fullscreen dispo et pas actif → on le demande
+      if(forceExit){
+        if(isRealFullscreen && document.exitFullscreen){
+          try{ await document.exitFullscreen(); }catch(e){}
+        }
+        document.body.classList.remove("fullscreen");
+        fullscreenBtn.textContent = "📱 Grand écran";
+        return;
+      }
+
       if(!isRealFullscreen && root.requestFullscreen){
         try{
           await root.requestFullscreen();
         }catch(e){
-          // si bloqué (iPhone etc), on bascule quand même en mode "fullscreen visuel"
+          // iPhone etc : fallback layout uniquement
         }
       }
 
-      // Toggle classe quoi qu'il arrive (ça garantit le layout mobile jeu)
       document.body.classList.toggle("fullscreen");
-
       fullscreenBtn.textContent = document.body.classList.contains("fullscreen")
         ? "⬅️ Quitter"
         : "📱 Grand écran";
     }
 
-    fullscreenBtn.addEventListener("click", toggleFullscreen);
+    fullscreenBtn.addEventListener("click", ()=>toggleFullscreen(false));
 
-    // ✅ Si l'utilisateur sort du vrai fullscreen, on remet le layout normal
     document.addEventListener("fullscreenchange", ()=>{
       if(!document.fullscreenElement){
         document.body.classList.remove("fullscreen");
@@ -508,7 +521,9 @@
     });
 
     const sleep = (ms)=>new Promise(r=>setTimeout(r,ms));
-    const EMOJIS = ["🐶","🐱","🐰","🦊","🐻","🐼","🐯","🐵"]; // 8 paires
+
+    // ✅ Plus d’emojis pour pouvoir monter à 20 cartes (10 paires)
+    const EMOJIS = ["🐶","🐱","🐰","🦊","🐻","🐼","🐯","🐵","🦁","🐸","🐮","🐷","🐔","🐧","🐙","🦄","🐢","🦋"];
 
     function shuffle(arr){
       const a=[...arr];
@@ -528,6 +543,35 @@
       toastEl.style.color = color || "#ffffffcc";
       toastEl.textContent = msg;
       setTimeout(()=>{ if(toastEl.textContent===msg) toastEl.textContent=""; }, 2500);
+    }
+
+    // ✅ Colonnes selon le nombre de cartes (adapté téléphone)
+    function getColsByTotal(total){
+      if(total <= 12) return 3;
+      return 4;
+    }
+
+    // ✅ Applique la grille automatiquement selon le deck
+    function applyBoardLayout(totalCards){
+      const cols = getColsByTotal(totalCards);
+      document.documentElement.style.setProperty("--cols", cols);
+
+      // petits ajustements si beaucoup de cartes
+      if(totalCards >= 20){
+        document.documentElement.style.setProperty("--gap", "8px");
+      }else{
+        document.documentElement.style.setProperty("--gap", "10px");
+      }
+    }
+
+    // ✅ Récupère le deck selon sélection
+    function makeDeckFromSelection(){
+      const totalCards = parseInt(cardsSelect.value || "16", 10); // 12/16/20
+      const pairs = totalCards / 2;
+      const chosen = EMOJIS.slice(0, pairs);
+      const deck = shuffle([...chosen, ...chosen]);
+      applyBoardLayout(deck.length);
+      return deck;
     }
 
     const app = initializeApp(firebaseConfig);
@@ -555,7 +599,7 @@
       uid = user.uid;
       connPill.innerHTML = "🔌 Connexion : <strong>OK</strong>";
       autoJoinFromURL();
-      renderMiniHud(); // ✅ direct
+      renderMiniHud();
     });
 
     function autoJoinFromURL(){
@@ -578,6 +622,9 @@
       const deck = cache.deck || [];
       const flipped = cache.flipped || [];
       const matched = cache.matched || {};
+
+      // ✅ applique layout selon taille deck
+      applyBoardLayout(deck.length);
 
       deck.forEach((val, idx)=>{
         const tile = document.createElement("div");
@@ -630,7 +677,6 @@
       turnPill.innerHTML = `🎯 Tour : <strong>${turnName}</strong>`;
     }
 
-    // ✅ LES INFOS QUI DOIVENT TOUJOURS ÊTRE VISIBLES EN PLEIN ÉCRAN
     function renderMiniHud(){
       if(!miniHud) return;
 
@@ -662,7 +708,13 @@
       miniHud.innerHTML = `
         <div class="row">
           <div class="title">🎯 Tour : <span style="color:var(--accent);font-weight:900;">${turnName}</span></div>
-          <div class="status">${statusText}</div>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <div class="status">${statusText}</div>
+            <!-- ✅ Bouton QUITTER plein écran -->
+            <button id="exitFullscreenHudBtn" class="secondary" style="padding:7px 10px; font-size:12px;">
+              ⬅️ Quitter
+            </button>
+          </div>
         </div>
 
         <div class="row scoreLine">
@@ -670,6 +722,12 @@
           <span class="chip ${otherIsTurn ? 'turn' : ''}">👤 ${otherName} : ${otherScore}</span>
         </div>
       `;
+
+      // ✅ Action bouton quitter (HUD)
+      const exitBtn = document.getElementById("exitFullscreenHudBtn");
+      if(exitBtn){
+        exitBtn.addEventListener("click", ()=>toggleFullscreen(true));
+      }
     }
 
     function enoughPlayers(){
@@ -763,7 +821,9 @@
       const name = (nameInput.value || "Joueur").trim().slice(0,20);
       const roomId = randId(6);
 
-      const deck = shuffle([...EMOJIS, ...EMOJIS]);
+      // ✅ deck selon choix 12/16/20
+      const deck = makeDeckFromSelection();
+
       const roomPath = `rooms/${roomId}`;
 
       const initial = {
@@ -851,7 +911,8 @@
       if(!currentRoomId) return;
       if(cache.turnUid !== uid) return toast("Seul le joueur qui a le tour peut restart 👀", "#aab0d6");
 
-      const deck = shuffle([...EMOJIS, ...EMOJIS]);
+      // ✅ restart selon choix 12/16/20
+      const deck = makeDeckFromSelection();
 
       const players = cache.players || {};
       const updates = {};
@@ -886,7 +947,6 @@
       await joinRoom(roomId, name, false);
     });
 
-    // ✅ message au démarrage
     showIntroOnce();
   </script>
 </body>
